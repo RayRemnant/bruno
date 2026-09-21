@@ -3,6 +3,7 @@ import { IconPlus, IconDownload, IconSettings } from '@tabler/icons';
 import ToolHint from 'components/ToolHint';
 import ColorBadge from 'components/ColorBadge';
 import SearchInput from 'components/SearchInput';
+import { getEnvironmentTreeOrder } from 'utils/environments';
 
 const EnvironmentListContent = ({
   environments,
@@ -56,9 +57,11 @@ const EnvironmentListContent = ({
   const filteredEnvs = useMemo(() => {
     const trimmedSearchText = searchText?.trim()?.toLowerCase();
     if (!trimmedSearchText) {
-      return environments || [];
+      return getEnvironmentTreeOrder(environments);
     }
-    return (environments || []).filter((env) => env.name.toLowerCase().includes(trimmedSearchText));
+    return (environments || [])
+      .filter((env) => env.name.toLowerCase().includes(trimmedSearchText))
+      .map((environment) => ({ environment, depth: 0 }));
   }, [environments, searchText]);
 
   return (
@@ -105,10 +108,11 @@ const EnvironmentListContent = ({
                     No results found
                   </div>
                 ) : (
-                  filteredEnvs.map((env) => (
+                  filteredEnvs.map(({ environment: env, depth }) => (
                     <div
                       key={env.uid}
                       className={`dropdown-item ${env.uid === activeEnvironmentUid ? 'dropdown-item-active' : ''}`}
+                      style={depth > 0 ? { paddingLeft: `${depth * 1 + 0.5}rem` } : undefined}
                       onClick={() => onEnvironmentSelect(env)}
                       data-tooltip-id="environment-name-tooltip"
                       data-tooltip-content={env.name}

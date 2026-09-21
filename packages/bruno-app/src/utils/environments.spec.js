@@ -3,7 +3,7 @@ jest.mock('nanoid', () => ({
   customAlphabet: () => () => 'aaaaaaaaaaaaaaaaaaaa1'
 }));
 
-import { applyScriptEnvVars, buildEnvVariable, stripEnvVarUid, getDuplicateSecretNames, writesCollidingSecrets, resolveSecretNameCollision, dedupeImportedSecrets, orderEnvironmentsByInheritance, isEnvironmentValidationError, DUPLICATE_SECRET_NAMES_ERROR, generateCopyName } from './environments';
+import { applyScriptEnvVars, buildEnvVariable, stripEnvVarUid, getDuplicateSecretNames, writesCollidingSecrets, resolveSecretNameCollision, dedupeImportedSecrets, orderEnvironmentsByInheritance, getEnvironmentTreeOrder, isEnvironmentValidationError, DUPLICATE_SECRET_NAMES_ERROR, generateCopyName } from './environments';
 import { invalidVariableNamesError } from './common/variables';
 
 describe('buildEnvVariable — dataType preservation for env export/import', () => {
@@ -865,5 +865,72 @@ describe('orderEnvironmentsByInheritance', () => {
     const base = env('base');
 
     expect(orderEnvironmentsByInheritance([dev, base])).toEqual([dev, base]);
+  });
+});
+
+describe('getEnvironmentTreeOrder', () => {
+  const env = (uid, name, extendsFrom) => ({ uid, name, extends: extendsFrom });
+
+  it('groups sub-environments directly beneath their parent, each level deeper', () => {
+    const dev = env('dev-uid', 'dev');
+    const accountA = env('a-uid', 'Account A', 'dev');
+    const accountB = env('b-uid', 'Account B', 'dev');
+    const staging = env('staging-uid', 'staging');
+    const accountD = env('d-uid', 'Account D', 'staging');
+
+    expect(getEnvironmentTreeOrder([dev, staging, accountA, accountD, accountB])).toEqual([
+      { environment: dev, depth: 0 },
+      { environment: accountA, depth: 1 },
+      { environment: accountB, depth: 1 },
+      { environment: staging, depth: 0 },
+      { environment: accountD, depth: 1 }
+    ]);
+  });
+
+  it('nests a multi-level chain by depth', () => {
+    const root = env('root-uid', 'root');
+    const middle = env('middle-uid', 'middle', 'root');
+    const leaf = env('leaf-uid', 'leaf', 'middle');
+
+    expect(getEnvironmentTreeOrder([leaf, root, middle])).toEqual([
+      { environment: root, depth: 0 },
+      { environment: middle, depth: 1 },
+      { environment: leaf, depth: 2 }
+    ]);
+  });
+
+  it('keeps input order for environments with no extends relationship', () => {
+    const first = env('first-uid', 'first');
+    const second = env('second-uid', 'second');
+
+    expect(getEnvironmentTreeOrder([first, second])).toEqual([
+      { environment: first, depth: 0 },
+      { environment: second, depth: 0 }
+    ]);
+  });
+
+  it('renders an environment with a missing parent as a root', () => {
+    const dev = env('dev-uid', 'dev', 'NotImported');
+
+    expect(getEnvironmentTreeOrder([dev])).toEqual([{ environment: dev, depth: 0 }]);
+  });
+
+  it('renders every environment in a cyclic pair exactly once', () => {
+    const first = env('first-uid', 'first', 'second');
+    const second = env('second-uid', 'second', 'first');
+
+    const result = getEnvironmentTreeOrder([first, second]);
+    expect(result).toHaveLength(2);
+    expect(result.map((entry) => entry.environment.uid).sort()).toEqual(['first-uid', 'second-uid']);
+  });
+
+  it('ignores a list-shaped extends reference, which no resolver follows', () => {
+    const dev = { uid: 'dev-uid', name: 'dev', extends: ['base'] };
+    const base = env('base-uid', 'base');
+
+    expect(getEnvironmentTreeOrder([dev, base])).toEqual([
+      { environment: dev, depth: 0 },
+      { environment: base, depth: 0 }
+    ]);
   });
 });

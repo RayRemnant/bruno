@@ -179,7 +179,8 @@ const StyledWrapper = styled.div`
       opacity: 0;
       transition: opacity 0.15s ease;
 
-      .activate-btn {
+      .activate-btn,
+      .add-sub-env-btn {
         display: flex;
         align-items: center;
         justify-content: center;
@@ -190,11 +191,16 @@ const StyledWrapper = styled.div`
         color: ${(props) => props.theme.text.muted};
         border-radius: 3px;
         transition: all 0.15s ease;
+      }
 
-        &:hover {
-          background: ${(props) => props.theme.workspace.button.bg};
-          color: ${(props) => props.theme.colors.text.green};
-        }
+      .activate-btn:hover {
+        background: ${(props) => props.theme.workspace.button.bg};
+        color: ${(props) => props.theme.colors.text.green};
+      }
+
+      .add-sub-env-btn:hover {
+        background: ${(props) => props.theme.workspace.button.bg};
+        color: ${(props) => props.theme.text};
       }
 
       .activated-checkmark {

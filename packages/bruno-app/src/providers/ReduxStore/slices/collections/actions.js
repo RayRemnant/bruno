@@ -1990,7 +1990,7 @@ export const generateGrpcurlCommand = (item, collectionUid) => async (dispatch, 
   });
 };
 
-export const addEnvironment = (name, collectionUid) => (dispatch, getState) => {
+export const addEnvironment = (name, collectionUid, extendsFrom) => (dispatch, getState) => {
   return new Promise((resolve, reject) => {
     const state = getState();
     const collection = findCollectionByUid(state.collections.collections, collectionUid);
@@ -2000,7 +2000,7 @@ export const addEnvironment = (name, collectionUid) => (dispatch, getState) => {
 
     const { ipcRenderer } = window;
     ipcRenderer
-      .invoke('renderer:create-environment', collection.pathname, name)
+      .invoke('renderer:create-environment', collection.pathname, name, undefined, undefined, extendsFrom)
       .then(
         dispatch(
           updateLastAction({

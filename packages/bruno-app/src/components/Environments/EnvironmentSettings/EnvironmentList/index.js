@@ -27,6 +27,7 @@ import {
 import { setEnvironmentsDraft, clearEnvironmentsDraft } from 'providers/ReduxStore/slices/collections';
 import { setEnvVarSearchQuery, setEnvVarSearchExpanded } from 'providers/ReduxStore/slices/app';
 import { validateName, validateNameError } from 'utils/common/regex';
+import { getEnvironmentTreeOrder } from 'utils/environments';
 import toast from 'react-hot-toast';
 import classnames from 'classnames';
 
@@ -54,6 +55,7 @@ const EnvironmentList = ({
   const [searchText, setSearchText] = useState('');
   const envListSearchInputRef = useRef(null);
   const [isCreatingInline, setIsCreatingInline] = useState(false);
+  const [subEnvParent, setSubEnvParent] = useState(null);
   const [renamingEnvUid, setRenamingEnvUid] = useState(null);
   const [newEnvName, setNewEnvName] = useState('');
   const [envNameError, setEnvNameError] = useState('');
@@ -231,6 +233,21 @@ const EnvironmentList = ({
 
   const handleCreateEnvClick = () => {
     if (!isModified && !isDotEnvModified) {
+      setSubEnvParent(null);
+      setIsCreatingInline(true);
+      setNewEnvName('');
+      setEnvNameError('');
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 50);
+    } else {
+      setSwitchEnvConfirmClose(true);
+    }
+  };
+
+  const handleCreateSubEnvClick = (env) => {
+    if (!isModified && !isDotEnvModified) {
+      setSubEnvParent(env);
       setIsCreatingInline(true);
       setNewEnvName('');
       setEnvNameError('');
@@ -244,6 +261,7 @@ const EnvironmentList = ({
 
   const handleCancelCreate = useCallback(() => {
     setIsCreatingInline(false);
+    setSubEnvParent(null);
     setNewEnvName('');
     setEnvNameError('');
   }, []);
@@ -257,10 +275,11 @@ const EnvironmentList = ({
       return;
     }
 
-    dispatch(addEnvironment(newEnvName, collection.uid))
+    dispatch(addEnvironment(newEnvName, collection.uid, subEnvParent?.name))
       .then(() => {
-        toast.success('Environment created!');
+        toast.success(subEnvParent ? `Sub-environment created under "${subEnvParent.name}"!` : 'Environment created!');
         setIsCreatingInline(false);
+        setSubEnvParent(null);
         setNewEnvName('');
         setEnvNameError('');
       })
@@ -476,10 +495,50 @@ const EnvironmentList = ({
     setDotEnvViewMode(mode);
   };
 
-  const filteredEnvironments
-    = environments?.filter((env) => env.name.toLowerCase().includes(searchText.toLowerCase())) || [];
+  const filteredEnvironments = searchText
+    ? (environments?.filter((env) => env.name.toLowerCase().includes(searchText.toLowerCase())) || [])
+        .map((environment) => ({ environment, depth: 0 }))
+    : getEnvironmentTreeOrder(environments);
 
   const selectedDotEnvData = dotEnvFiles.find((f) => f.filename === selectedDotEnvFile);
+
+  const renderCreateEnvInput = (style) => (
+    <div className="environment-item creating" ref={createContainerRef} style={style}>
+      <input
+        ref={inputRef}
+        type="text"
+        className="environment-name-input"
+        data-testid="env-create-name-input"
+        value={newEnvName}
+        onChange={handleEnvNameChange}
+        onKeyDown={handleEnvNameKeyDown}
+        placeholder={subEnvParent ? 'Sub-environment name...' : 'Environment name...'}
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck="false"
+      />
+      <div className="inline-actions">
+        <button
+          className="inline-action-btn save"
+          onClick={handleSaveNewEnv}
+          onMouseDown={(e) => e.preventDefault()}
+          title="Save"
+          data-testid="env-create-save"
+        >
+          <IconCheck size={14} strokeWidth={2} />
+        </button>
+        <button
+          className="inline-action-btn cancel"
+          onClick={handleCancelCreate}
+          onMouseDown={(e) => e.preventDefault()}
+          title="Cancel"
+        >
+          <IconX size={14} strokeWidth={2} />
+        </button>
+      </div>
+    </div>
+  );
 
   const renderContent = () => {
     if (activeView === 'dotenv' && selectedDotEnvFile && selectedDotEnvData) {
@@ -626,113 +685,93 @@ const EnvironmentList = ({
                 )}
               </div>
               <div className="environments-list">
-                {filteredEnvironments.map((env) => (
-                  <div
-                    key={env.uid}
-                    id={env.uid}
-                    data-testid="collection-env-list-item"
-                    className={classnames('environment-item', {
-                      active: activeView === 'environment' && selectedEnvironment?.uid === env.uid,
-                      renaming: renamingEnvUid === env.uid,
-                      activated: activeEnvironmentUid === env.uid
-                    })}
-                    onClick={() => renamingEnvUid !== env.uid && handleEnvironmentClick(env)}
-                    onDoubleClick={() => handleEnvironmentDoubleClick(env)}
-                  >
-                    {renamingEnvUid === env.uid ? (
-                      <div className="rename-container" ref={renameContainerRef}>
-                        <input
-                          ref={inputRef}
-                          type="text"
-                          className="environment-name-input"
-                          value={newEnvName}
-                          onChange={handleEnvNameChange}
-                          onKeyDown={handleEnvNameKeyDown}
-                          autoComplete="off"
-                          autoCorrect="off"
-                          autoCapitalize="off"
-                          spellCheck="false"
-                        />
-                        <div className="inline-actions">
-                          <button
-                            className="inline-action-btn save"
-                            onClick={handleSaveRename}
-                            onMouseDown={(e) => e.preventDefault()}
-                            title="Save"
-                          >
-                            <IconCheck size={14} strokeWidth={2} />
-                          </button>
-                          <button
-                            className="inline-action-btn cancel"
-                            onClick={handleCancelRename}
-                            onMouseDown={(e) => e.preventDefault()}
-                            title="Cancel"
-                          >
-                            <IconX size={14} strokeWidth={2} />
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <ColorBadge color={env.color} size={8} />
-                        <span className="environment-name">{env.name}</span>
-                        <div className="environment-actions">
-                          {activeEnvironmentUid === env.uid ? (
-                            <div className="activated-checkmark" title="Active environment">
-                              <IconCheck size={16} strokeWidth={2} />
-                            </div>
-                          ) : (
+                {filteredEnvironments.map(({ environment: env, depth }) => (
+                  <React.Fragment key={env.uid}>
+                    <div
+                      id={env.uid}
+                      data-testid="collection-env-list-item"
+                      className={classnames('environment-item', {
+                        active: activeView === 'environment' && selectedEnvironment?.uid === env.uid,
+                        renaming: renamingEnvUid === env.uid,
+                        activated: activeEnvironmentUid === env.uid
+                      })}
+                      style={depth > 0 ? { paddingLeft: `${depth * 1 + 0.75}rem` } : undefined}
+                      onClick={() => renamingEnvUid !== env.uid && handleEnvironmentClick(env)}
+                      onDoubleClick={() => handleEnvironmentDoubleClick(env)}
+                    >
+                      {renamingEnvUid === env.uid ? (
+                        <div className="rename-container" ref={renameContainerRef}>
+                          <input
+                            ref={inputRef}
+                            type="text"
+                            className="environment-name-input"
+                            value={newEnvName}
+                            onChange={handleEnvNameChange}
+                            onKeyDown={handleEnvNameKeyDown}
+                            autoComplete="off"
+                            autoCorrect="off"
+                            autoCapitalize="off"
+                            spellCheck="false"
+                          />
+                          <div className="inline-actions">
                             <button
-                              className="activate-btn"
-                              onClick={(e) => handleActivateEnvironment(e, env)}
-                              title="Activate environment"
+                              className="inline-action-btn save"
+                              onClick={handleSaveRename}
+                              onMouseDown={(e) => e.preventDefault()}
+                              title="Save"
                             >
-                              <IconCheck size={16} strokeWidth={2} />
+                              <IconCheck size={14} strokeWidth={2} />
                             </button>
-                          )}
+                            <button
+                              className="inline-action-btn cancel"
+                              onClick={handleCancelRename}
+                              onMouseDown={(e) => e.preventDefault()}
+                              title="Cancel"
+                            >
+                              <IconX size={14} strokeWidth={2} />
+                            </button>
+                          </div>
                         </div>
-                      </>
-                    )}
-                  </div>
+                      ) : (
+                        <>
+                          <ColorBadge color={env.color} size={8} />
+                          <span className="environment-name">{env.name}</span>
+                          <div className="environment-actions">
+                            {activeEnvironmentUid === env.uid ? (
+                              <div className="activated-checkmark" title="Active environment">
+                                <IconCheck size={16} strokeWidth={2} />
+                              </div>
+                            ) : (
+                              <button
+                                className="activate-btn"
+                                onClick={(e) => handleActivateEnvironment(e, env)}
+                                title="Activate environment"
+                              >
+                                <IconCheck size={16} strokeWidth={2} />
+                              </button>
+                            )}
+                            <button
+                              className="add-sub-env-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCreateSubEnvClick(env);
+                              }}
+                              title="Add sub-environment"
+                              data-testid="add-sub-environment"
+                            >
+                              <IconPlus size={14} strokeWidth={2} />
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {isCreatingInline && subEnvParent?.uid === env.uid
+                      && renderCreateEnvInput({ paddingLeft: `${(depth + 1) * 1 + 0.75}rem` })}
+                  </React.Fragment>
                 ))}
 
-                {isCreatingInline && (
-                  <div className="environment-item creating" ref={createContainerRef}>
-                    <input
-                      ref={inputRef}
-                      type="text"
-                      className="environment-name-input"
-                      data-testid="env-create-name-input"
-                      value={newEnvName}
-                      onChange={handleEnvNameChange}
-                      onKeyDown={handleEnvNameKeyDown}
-                      placeholder="Environment name..."
-                      autoComplete="off"
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      spellCheck="false"
-                    />
-                    <div className="inline-actions">
-                      <button
-                        className="inline-action-btn save"
-                        onClick={handleSaveNewEnv}
-                        onMouseDown={(e) => e.preventDefault()}
-                        title="Save"
-                        data-testid="env-create-save"
-                      >
-                        <IconCheck size={14} strokeWidth={2} />
-                      </button>
-                      <button
-                        className="inline-action-btn cancel"
-                        onClick={handleCancelCreate}
-                        onMouseDown={(e) => e.preventDefault()}
-                        title="Cancel"
-                      >
-                        <IconX size={14} strokeWidth={2} />
-                      </button>
-                    </div>
-                  </div>
-                )}
+                {isCreatingInline && !subEnvParent && renderCreateEnvInput()}
 
                 {envNameError && (isCreatingInline || renamingEnvUid) && <div className="env-error">{envNameError}</div>}
 

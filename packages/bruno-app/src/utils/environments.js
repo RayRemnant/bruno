@@ -269,6 +269,58 @@ export const orderEnvironmentsByInheritance = (environments) => {
 };
 
 /**
+ * Orders environments into a parent-then-children tree for display, annotating each with its
+ * nesting `depth` (0 for a root). A child is placed immediately after its `extends` parent,
+ * recursively, rather than merely after it anywhere in the list (contrast
+ * `orderEnvironmentsByInheritance`, which only guarantees relative order for re-pointing imports).
+ * An environment whose `extends` target doesn't resolve — a name outside the set, or one caught in
+ * a cycle — renders as a root in its original position, since inheritance-warning UI already
+ * surfaces that state elsewhere.
+ */
+export const getEnvironmentTreeOrder = (environments) => {
+  const list = environments || [];
+  const firstByName = new Map();
+  list.forEach((environment) => {
+    if (!firstByName.has(environment.name)) {
+      firstByName.set(environment.name, environment);
+    }
+  });
+
+  const childrenByParentUid = new Map();
+  const roots = [];
+  list.forEach((environment) => {
+    const parent = typeof environment.extends === 'string' ? firstByName.get(environment.extends) : undefined;
+    if (parent && parent.uid !== environment.uid) {
+      if (!childrenByParentUid.has(parent.uid)) {
+        childrenByParentUid.set(parent.uid, []);
+      }
+      childrenByParentUid.get(parent.uid).push(environment);
+    } else {
+      roots.push(environment);
+    }
+  });
+
+  const ordered = [];
+  const visited = new Set();
+
+  const visit = (environment, depth, seen) => {
+    if (visited.has(environment.uid) || seen.has(environment.uid)) {
+      return;
+    }
+    visited.add(environment.uid);
+    seen.add(environment.uid);
+    ordered.push({ environment, depth });
+    (childrenByParentUid.get(environment.uid) || []).forEach((child) => visit(child, depth + 1, seen));
+  };
+
+  roots.forEach((environment) => visit(environment, 0, new Set()));
+  // A cyclic chain never reaches a root, so its members are visited last, each as its own root.
+  list.forEach((environment) => visit(environment, 0, new Set()));
+
+  return ordered;
+};
+
+/**
  * Strips the UID from an environment variable for comparison purposes.
  * This is useful when comparing variables where UIDs may differ but the actual data is the same.
  */
