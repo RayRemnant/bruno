@@ -681,3 +681,66 @@ export const groupRequestsByPath = (requests, transformFn, options = {}) => {
 
   return folders;
 };
+
+// Soldo API specs (collections named with the company's `sld-` prefix) repeat the same three
+// identity headers on every operation — they are a collection-wide credential rather than
+// per-operation input. Importing them verbatim duplicates a constant across every request, so they
+// are lifted onto the collection root and pointed at environment variables the user defines once.
+const SOLDO_COLLECTION_NAME_PREFIX = 'sld-';
+
+const SOLDO_SHARED_HEADERS = [
+  { name: 'soldo-principalId', value: '{{principalId}}' },
+  { name: 'soldo-accountId', value: '{{accountId}}' },
+  { name: 'soldo-viewId', value: '{{viewId}}' }
+];
+
+export const hoistSoldoSharedHeaders = (brunoCollection) => {
+  const collectionName = brunoCollection?.name;
+  if (typeof collectionName !== 'string' || !collectionName.toLowerCase().startsWith(SOLDO_COLLECTION_NAME_PREFIX)) {
+    return;
+  }
+
+  const sharedHeadersByName = new Map(SOLDO_SHARED_HEADERS.map((header) => [header.name.toLowerCase(), header]));
+  const hoistedNames = new Set();
+
+  const stripSharedHeaders = (headers) =>
+    (headers || []).filter((header) => {
+      const sharedHeader = sharedHeadersByName.get(String(header.name).toLowerCase());
+      if (!sharedHeader) {
+        return true;
+      }
+      hoistedNames.add(sharedHeader.name);
+      return false;
+    });
+
+  const stripFromItems = (items) => {
+    each(items || [], (item) => {
+      if (item.request) {
+        item.request.headers = stripSharedHeaders(item.request.headers);
+      }
+      // Examples snapshot the request's headers at build time, so they need the same treatment
+      each(item.examples || [], (example) => {
+        if (example.request) {
+          example.request.headers = stripSharedHeaders(example.request.headers);
+        }
+      });
+      stripFromItems(item.items);
+    });
+  };
+
+  stripFromItems(brunoCollection.items);
+
+  if (hoistedNames.size === 0) {
+    return;
+  }
+
+  brunoCollection.root.request.headers = SOLDO_SHARED_HEADERS
+    .filter((header) => hoistedNames.has(header.name))
+    .map((header) => ({
+      uid: uuid(),
+      name: header.name,
+      value: header.value,
+      description: '',
+      enabled: true
+    }));
+};

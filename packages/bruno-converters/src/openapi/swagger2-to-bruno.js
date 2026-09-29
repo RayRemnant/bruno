@@ -14,7 +14,8 @@ import {
   groupRequestsByPath,
   normalizeItemName,
   getTagDescriptions,
-  toSpecString
+  toSpecString,
+  hoistSoldoSharedHeaders
 } from './openapi-common';
 
 /**
@@ -647,6 +648,8 @@ export const parseSwagger2Collection = (data, options = {}) => {
       meta: { name: brunoCollection.name },
       docs: toSpecString(collectionData.info?.description)
     };
+
+    hoistSoldoSharedHeaders(brunoCollection);
 
     return brunoCollection;
   } catch (err) {

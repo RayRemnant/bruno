@@ -12,7 +12,8 @@ import {
   groupRequestsByPath,
   normalizeItemName,
   getTagDescriptions,
-  toSpecString
+  toSpecString,
+  hoistSoldoSharedHeaders
 } from './openapi-common';
 
 const getContentLevelExample = (bodyContent) => {
@@ -1041,6 +1042,8 @@ export const parseOpenApiCollection = (data, options = {}) => {
       },
       docs: toSpecString(collectionData.info?.description)
     };
+
+    hoistSoldoSharedHeaders(brunoCollection);
 
     return brunoCollection;
   } catch (err) {
